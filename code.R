@@ -130,18 +130,6 @@ library(earth)
 library(sets)
 
 
-########
-#this is an example of how to use the causalNullTest function
-#' @examples
-#' # Sample data
- n <- 1000
- W <- data.frame(W1 = runif(n))
- Z <- rbinom(n, size = 1, prob = 1/(1 + exp(2-W$W1)))
- A <- (1-Z) * rnorm(n, mean = W$W1, sd = abs(1 + W$W1))
- Y <- rexp(n, rate = 1+abs(W$W1 * A))
- causalNullTest(Y, A, W, p = c(1,2,Inf), control = list(cross.fit = FALSE, verbose=TRUE, g.n.bins = 2:5))
- #########
-
 
 
 #This function performs a hypothesis test that the causal dose-response curve theta(a)
