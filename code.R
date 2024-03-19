@@ -14,17 +14,17 @@ library(stats)
 library(psych)
 
 FED_data <- read.csv("./data/FEDFUNDS.csv")
-us_inflation <- read_excel("C:/Users/henry/OneDrive/Year_2/Master Thesis/Main/Code/data/us_inflation.xlsx",
+us_inflation <- read_excel("./data/us_inflation.xlsx",
                            skip = 10) # skip the first 10 rows as its just information
 
 riksbanken_data <- read_delim("data/riksbanken_monthly.csv", 
                               delim = ";", escape_double = FALSE, trim_ws = TRUE)
 
-swe_inflation <- read_csv("data/swedish_CPI.csv", 
+swe_inflation <- read_csv("./data/swedish_CPI.csv", 
     col_names = FALSE, skip = 3)
 
-us_unemployment <- read_csv("data/us_UNRATE.csv")
-swe_unemployment <- read_csv("data/swe_UNRATE.csv")
+us_unemployment <- read_csv("./data/us_UNRATE.csv")
+swe_unemployment <- read_csv("./data/swe_UNRATE.csv")
 
 
 #Data cleaning
@@ -100,21 +100,6 @@ ts.plot(data$swe_interest
 
 
 
-riksbanken_data$Medel <- as.numeric(riksbanken_data$Medel)
-
-gsub(",", ".", riksbanken_data$Medel) %>% as.numeric()
-
-#converting to consistent time format
-
-
-##plots
-
-
-
-
-##
-
-
 
 
 #package for testing the null of flat density
@@ -144,6 +129,6 @@ causalNullTest(Y = data$swe_CPI[-nrow(data)], A=data$swe_interest[-nrow(data)],
 
 #test for us data
 causalNullTest(Y = data$us_CPI, A=data$us_interest, W=data.frame(data$us_unemployment), 
-               control = list(cross.fit = FALSE, verbose=TRUE), g.n.bins = 2:5))
+               control = list(cross.fit = FALSE, verbose=TRUE, g.n.bins = 2:5))
 
                
