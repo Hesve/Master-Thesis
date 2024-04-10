@@ -12,6 +12,8 @@ library(lubridate)
 library(forecast)
 library(stats)
 library(psych)
+library(xtable)
+
 
 FED_data <- read.csv("./data/FEDFUNDS.csv")
 us_inflation <- read_excel("./data/us_inflation.xlsx",
@@ -59,17 +61,27 @@ data <- seq(as.Date("1994-06-01"), length.out = 355, by = "month") %>%
          us_unemployment= us_unemployment$UNRATE,
          "swe_unemployment" = swe_unemployment$UnemploymentRate)
 
-psych::describe(data[,-1])
+psych::describe(data)[-1,-c(1,6,7,10,13)] %>% #exclude date as first row as well as some redundant columns 
+  xtable(caption="Summary statistics for the different variables", 
+         label="summary_table", digits=c(0,0, rep(2, ncol(.)-1))) %>%  
+  print(caption.placement="top", table.placement="H")
 
-#should probably make this into a nicer wrapper funciton later
+  
+
+#should probably make this into a nicer wrapper function later
 par(mfrow=c(3,2))
-variables <- colnames(data)[-1] 
+variables <- colnames(data)[-1] #excluding date variable
+
 
 for (var in variables){
   select(data, var) %>% 
 ts(start = c(1994, 6), frequency = 12) %>% 
-    plot()
+    plot(xlab="Year")
 }
+
+select(data, variables[1]) %>% 
+  ts(start = c(1994, 6), frequency = 12) %>% 
+  plot(xlab="Year")
 
 for(var in variables){
   select(data, var) %>% 
@@ -78,7 +90,13 @@ for(var in variables){
 tsdisplay(data$swe_CPI, lag.max = 24, main = "swe_CPI")
 
 
-apply(data[,-1], 2, Box.test, lag = 12, type = "Ljung-Box")
+#ljung box tests
+
+do.call(rbind, apply(data[,-1], 2, Box.test, lag = 12, type = "Ljung-Box")) %>% 
+  .[,1:3] %>% 
+   xtable(caption="Ljung-Box test for white noise", 
+          label="ljung_box_table", digits=c(0,0,0,2)) %>% 
+  print(caption.placement="top", table.placement="H")
 #all p <0.05 so we reject the null hypothesis that the data is white noise
 
 
@@ -99,6 +117,7 @@ ts.plot(data$swe_interest
         )
 
 
+do.call(rbind, apply(data[,-1], 2, Box.test, lag = 12, type = "Ljung-Box"))
 
 
 
@@ -122,6 +141,7 @@ library(sets)
 #Y is the outcome, A is the exposure, and W is a matrix of covariates.
 
 #test for swedish data
+
 causalNullTest(Y = data$swe_CPI[-nrow(data)], A=data$swe_interest[-nrow(data)],
                W=data.frame(data$swe_unemployment[-nrow(data)]),
                control = list(cross.fit = FALSE, verbose=TRUE, g.n.bins = 2:5))
