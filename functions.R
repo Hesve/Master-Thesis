@@ -23,7 +23,7 @@ cc_table <- function(x,y, lags){
 #Wrapper function to make time series plots
 ts_plot <- function(tibble, vars, frequency=12, start){
   for (var in vars){
-    select(data, var) %>% 
+    select(tibble, var) %>% 
       ts(start=start, frequency=frequency) %>% 
       plot(xlab="Year")
   }
@@ -149,6 +149,53 @@ np.plot<- function(result_list, view="fixed", .., theta=NULL, phi=NULL, ...){
     })
 }
 
+#function to perform the np_multi over two lagged variables
+#for each alg of the second variable, it performs the np_multi for each lag of the first variable
+np_double_lag <- function(formula, data, lag_var1, lag_var2, lags1, lags2, replace_lag_0=TRUE, regtype="ll"){
+  results_list <- sapply(lags2, FUN=function(lag2){
+    cat("Current", lag_var2, "lag is", lag2, fill=TRUE)
+    new_formula <- add_lag_to_formula(formula, lag_var=lag_var2, lag=lag2, replace_lag_0)
+    res <- np_multi(new_formula, data, lag_var=lag_var1, lags=lags1, replace_lag_0, 
+                    regtype, single_lag=TRUE)
+    names(res) <- paste(lag_var1, "lag", "=", lags1)
+  return(res)},
+  simplify=FALSE)
+
+  return(results_list)
+}
+
+
+
+np_parallel <- function(formula, data, lag_var1, lag_var2, lags1, lags2, 
+                        replace_lag_0=TRUE, regtype="ll"){
+  n_cores <- parallel::detectCores()- 1 #saving 1 core for OS 
+  print("cores done")
+  
+  cl <- makeCluster(n_cores)
+  clusterExport(cl, c("data", "formula"))
+  print("export done")
+  clusterEvalQ(cl, {
+    library(tidyverse)
+    library(np)
+    source("functions.R") # Ensure this file is in the working directory
+  })
+  print("eval done")
+  formula
+  data
+  results_list <- parSapply(cl, lags2, FUN=function(lag2){
+    print("starting parsapply")
+    print(formula)
+    new_formula <- add_lag_to_formula(formula, lag_var=lag_var2, lag=lag2, replace_lag_0)
+    res <- np_multi(new_formula, data, lag_var=lag_var1, lags=lags1, replace_lag_0, 
+                    regtype, single_lag=TRUE)
+    names(res) <- paste(lag_var1, "lag", "=", lags1)
+    return(res)},
+    simplify=FALSE)
+  names(results_list) <- paste(lag_var2, "lag", "=", lags2)
+  stopCluster(cl)
+  return(results_list)
+}
+
 #function to retrieve the sign test results from a list of npreg models freom np.multi function and 
 #then present the bandwidht value, p_value and model R" for all models in a list
 #note, only works for when the np.multi function is used with single_lag=TRUE since it
@@ -185,25 +232,80 @@ np.summary <- function(np_model_list){
 #it also needs to adjust the length of the Y variable and W variable to match the lagged A variable
 #its assumed that the number of observaitons for all variables with no lag is the same
 #the function returns the results of the causal null test for the lagged variable
-causal_wrapper <- function(Y, A, W, lag, control = list(cross.fit = FALSE, verbose=TRUE, g.n.bins = 2:5)){
+causal_wrapper <- function(Y, A, W, lag, control, p){
   stopifnot("Invalid lag" = (is.numeric(lag) && lag >=0))
   stopifnot("Y and A length differ" = (length(Y) == length(A)))
   stopifnot("Y and W length differ" = (length(Y) == length(W)))
   if (lag == 0) {
-    results <- causalNullTest(Y = Y, A=A, W=data.frame(W), control=control)
+    results <- causalNullTest(Y = Y, A=A, W=data.frame(W), control=control, p=p)
   } else {
-    results <- causalNullTest(Y = Y[1:(length(Y)-lag)], A=A[(1+lag):length(A)], W=data.frame(W[1:(length(W) - lag)]), control=control)
+    results <- causalNullTest(Y = Y[1:(length(Y)-lag)], A=A[(1+lag):length(A)], 
+                              W=data.frame(W[1:(length(W) - lag)]), 
+                              control=control, p=p)
   }
   return(results)
 }
 
-causall_null_multi <- function(Y, A, W, lags, control = list(cross.fit = FALSE, verbose=TRUE, g.n.bins = 2:5)){
+causal_null_multi <- function(Y, A, W, lags, control = list(cross.fit = TRUE,
+                                                             verbose=TRUE), p=Inf){
   res <- sapply(lags, FUN=function(lag){
     cat("current lag is", lag, fill = TRUE)
-    causal_wrapper(Y, A, W, lag, control)
+    causal_wrapper(Y, A, W, lag, control, p=p)
   })
   names(res) <- paste("lag", lags)
   return(res)
 }
 
+#function to perform the causal_null_multi function for two lagged variables in parallel similiar to the np_parallel function
+#lag_var which variable of the covariates to lag
+#lags1 is asusmed to be A
+#lags 2 is the lags for lag_var
+
+####does not work yet#########
+causal_null_double_lag <- function(Y, A, W, lag_var2,  lags1, lags2, 
+              control = list(cross.fit = FALSE, verbose=TRUE, g.n.bins = 2:5)){
+  n_cores <- parallel::detectCores()- 1 #saving 1 core for OS 
+  print("cores done")
+  cl <- makeCluster(n_cores)
+  print(Y)
+  clusterExport(cl, c("Y", "A", "W", "lag_var2", "lags1", "lags2", "control"), envir=environment())
+  print("export done")
+  clusterEvalQ(cl, {
+    library(tidyverse)
+    library(ctsCausal)
+    source("functions.R") # Ensure this file is in the working directory
+  })
+   results_list <- parSapply(lags2, FUN=function(lag2){
+     
+    res <- causall_null_multi(Y, A, W, lags1, control)
+    names(res) <- paste(lag_var1, "lag", "=", lags1)
+    return(res)},
+    simplify=FALSE)
+   names(results_list) <- paste(lag_var2, "lag", "=", lags2)
+   stopCluster(cl)
+  return(results_list)
+}
+
+#parallel version of the causall_null_multi function
+causal_null_parallel <- function(Y, A, W, lags, control = list(cross.fit = FALSE,
+                                                             verbose=TRUE, g.n.bins = 2:5), p=2){
+  n_cores <- parallel::detectCores()- 1 #saving 1 core for OS 
+  print("cores done")
+  cl <- makeCluster(n_cores)
+  clusterExport(cl, c("Y", "A", "W", "lags", "control", "p"), envir=environment())
+  print("export done")
+  clusterEvalQ(cl, {
+    library(tidyverse)
+    library(ctsCausal)
+    source("functions.R") # Ensure this file is in the working directory
+  })
+  print("starting parsapply")
+   results_list <- parSapply(cl, lags, FUN=function(lag){
+    res <- causal_wrapper(Y, A, W, lag, control, p=p)
+    return(res)},
+    simplify=FALSE)
+   names(results_list) <- paste("lag", lags)
+   stopCluster(cl)
+  return(results_list)
+}
 

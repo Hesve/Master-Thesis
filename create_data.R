@@ -14,12 +14,19 @@ FED_data <- read.csv("./data/FEDFUNDS.csv")
 
 us_inflation <- read_csv("./data/us_cpi_12_month.csv",skip=0)
 
+us_PCE <- read_csv("./data/us_PCE.csv",skip=c(3))
+us_PCE <- t(us_PCE[2,])#removing reduant variables and information
+us_PCE <- data.frame("PCE"= us_PCE[-c(1,2)], "Year" = rownames(us_PCE)[-c(1,2)])
+us_PCE$PCE <- as.numeric(us_PCE$PCE)
+
+swe_KPIF <- read_excel("./data/swe_kpif.xls", skip = 6, sheet="Data")
 
 riksbanken_data <- read_delim("data/riksbanken_monthly.csv", 
                               delim = ";", escape_double = FALSE, trim_ws = TRUE)
 
 swe_inflation <- read_csv("./data/swedish_CPI.csv", 
                           col_names = FALSE, skip = 3)
+
 
 us_unemployment <- read_csv("./data/us_unrate_SA.csv")
 swe_unemployment <- read_csv("./data/swe_unrate_SA.csv")
@@ -42,6 +49,8 @@ us_inflation$InflationRate <- as.numeric(us_inflation$InflationRate)
 
 swe_inflation <- swe_inflation[-c(1:173, 529),] 
 colnames(swe_inflation) <- c("Date", "InflationRate")
+
+swe_KPIF <- swe_KPIF[54:408,c(1,5)]
   
 
 riksbanken_data <- riksbanken_data[-nrow(riksbanken_data),]
@@ -51,6 +60,7 @@ us_unemployment <- us_unemployment[-c(1:which(us_unemployment$DATE =="1994-05-01
 swe_unemployment <- swe_unemployment[-c(1:which(swe_unemployment$DATE=="1994-05-01")),]
 colnames(swe_unemployment) <- c("Date", "UnemploymentRate")
 
+us_PCE <- us_PCE[414:768,]
 
 dates <- seq(as.Date("1994-06-01"), length.out = 355, by = "month") 
 
@@ -66,7 +76,9 @@ data <- tibble(
   us_interest = FED_data$FEDFUNDS,
   swe_interest = as.numeric(gsub(",", ".", riksbanken_data$Medel)),
   us_unemployment = us_unemployment$UNRATE,
-  swe_unemployment = swe_unemployment$UnemploymentRate
+  swe_unemployment = swe_unemployment$UnemploymentRate,
+  swe_KPIF = swe_KPIF$KPIF,
+  us_PCE = us_PCE$PCE
 )
 
 save(data, file = "./data.RData")
@@ -83,9 +95,10 @@ library(lubridate)
 # Group by Year and Quarter and calculate the average for each variable
 data_quarterly <-data_quarterly %>%
   group_by(Year, Quarter) %>%
-  summarise(across(c(swe_CPI, us_CPI, us_interest, swe_interest, us_unemployment, swe_unemployment), mean, na.rm = TRUE)) %>%
+  summarise(across(c(swe_CPI, us_CPI, us_interest, swe_interest, us_unemployment, swe_unemployment, swe_KPIF, us_PCE), mean, na.rm = TRUE)) %>%
   ungroup()
 
+data_quarterly <- apply(data_quarterly[,-1],2, FUN= function(x) round(x,2))
 save(data_quarterly, file = "./data_quarterly.RData")
 
 
