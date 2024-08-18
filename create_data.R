@@ -19,7 +19,7 @@ us_PCE <- t(us_PCE[2,])#removing reduant variables and information
 us_PCE <- data.frame("PCE"= us_PCE[-c(1,2)], "Year" = rownames(us_PCE)[-c(1,2)])
 us_PCE$PCE <- as.numeric(us_PCE$PCE)
 
-swe_KPIF <- read_excel("./data/swe_kpif.xls", skip = 6, sheet="Data")
+swe_CPIF <- read_excel("./data/swe_kpif.xls", skip = 6, sheet="Data")
 
 riksbanken_data <- read_delim("data/riksbanken_monthly.csv", 
                               delim = ";", escape_double = FALSE, trim_ws = TRUE)
@@ -50,7 +50,7 @@ us_inflation$InflationRate <- as.numeric(us_inflation$InflationRate)
 swe_inflation <- swe_inflation[-c(1:173, 529),] 
 colnames(swe_inflation) <- c("Date", "InflationRate")
 
-swe_KPIF <- swe_KPIF[54:408,c(1,5)]
+swe_CPIF <- swe_CPIF[54:408,c(1,5)]
   
 
 riksbanken_data <- riksbanken_data[-nrow(riksbanken_data),]
@@ -77,7 +77,7 @@ data <- tibble(
   swe_interest = as.numeric(gsub(",", ".", riksbanken_data$Medel)),
   us_unemployment = us_unemployment$UNRATE,
   swe_unemployment = swe_unemployment$UnemploymentRate,
-  swe_KPIF = swe_KPIF$KPIF,
+  swe_CPIF = swe_CPIF$CPIF,
   us_PCE = us_PCE$PCE
 )
 
@@ -95,10 +95,12 @@ library(lubridate)
 # Group by Year and Quarter and calculate the average for each variable
 data_quarterly <-data_quarterly %>%
   group_by(Year, Quarter) %>%
-  summarise(across(c(swe_CPI, us_CPI, us_interest, swe_interest, us_unemployment, swe_unemployment, swe_KPIF, us_PCE), mean, na.rm = TRUE)) %>%
+  summarise(across(c(swe_CPI, us_CPI, us_interest, swe_interest, us_unemployment, swe_unemployment, swe_CPIF, us_PCE), mean, na.rm = TRUE)) %>%
   ungroup()
 
-data_quarterly <- apply(data_quarterly[,-1],2, FUN= function(x) round(x,2))
+data_quarterly <- tibble(data_quarterly) %>% 
+  dplyr::mutate(across(where(is.numeric), round, 2))
+
 save(data_quarterly, file = "./data_quarterly.RData")
 
 

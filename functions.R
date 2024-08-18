@@ -25,7 +25,7 @@ ts_plot <- function(tibble, vars, frequency=12, start){
   for (var in vars){
     select(tibble, var) %>% 
       ts(start=start, frequency=frequency) %>% 
-      plot(xlab="Year")
+      plot(xlab="Year",cex.lab=1.5, cex.axis=1.5, cex.main=1.5, cex.sub=1.5, cex=5)
   }
 }
 
@@ -63,7 +63,7 @@ drop_formula_term <- function(the_formula, var_name) {
 #formula <- swe_CPI ~ swe_interest + swe_unemployment
 # add_lag_to_formula(formula, "swe_interest", 1:2) 
 #returns
-# swe_CPI ~ swe_interest + swe_unemployment + dplyr::lag(swe_interest, 1) + dplyr::lag(swe_interest, 2)
+# swe_CPI ~ swe_interest + swe_unemployment + dplyr::lag(swe_interest, 1) 
 
 add_lag_to_formula <- function(formula, lag_var, lag, replace_lag_0=FALSE) {
   # Ensure lag_var is treated as a symbol
@@ -76,7 +76,7 @@ add_lag_to_formula <- function(formula, lag_var, lag, replace_lag_0=FALSE) {
   #saves all lag expressions in a list
   lag_expressions <- lapply(lag, function(l) {
     l <- as.numeric(l)  # Convert to numeric to avoid the L suffix
-    bquote(dplyr::lag(.(lag_var_sym), .(l)))
+    bquote(lag(.(lag_var_sym), .(l)))
   })
   
   #creating a proper language expression to use in formula by combining the  
@@ -256,37 +256,88 @@ causal_null_multi <- function(Y, A, W, lags, control = list(cross.fit = TRUE,
   return(res)
 }
 
+length_checks <- function(Y, A, W){
+  stopifnot("Y and A length differ" = (length(Y) == length(A)))
+  stopifnot("Y and W length differ" = (length(Y) == nrow(W)))
+}
+
+#function to lag a variable  for each given lag and return a new dataframe with autoregressed variables
+#lags integer of how many lags to consider
+#var_name is name of the variable to be lagged to be used in DF
+auto_lag <- function(var, lags, var_name){
+  new_data <- data.frame(var)
+  seqs <- seq_along(1:lags)
+  for (lag in seqs){
+    new_data <- cbind(new_data, dplyr::lag(var, lag))
+  }
+  colnames(new_data) <- c(var_name, paste0(var_name, "_lag",seqs))
+  return(new_data)
+}
 #function to perform the causal_null_multi function for two lagged variables in parallel similiar to the np_parallel function
 #lag_var which variable of the covariates to lag
 #lags1 is asusmed to be A
 #lags 2 is the lags for lag_var
 
 ####does not work yet#########
-causal_null_double_lag <- function(Y, A, W, lag_var2,  lags1, lags2, 
-              control = list(cross.fit = FALSE, verbose=TRUE, g.n.bins = 2:5)){
+#performs the causalnulltest while lagging both A and W #and autoregessing Y
+causal_null_double_lag <- function(Y, A, W,  lag, control, p, autoregress_Y_lags, var_name){
+  stopifnot(is.data.frame(W))
+  stopifnot("Invalid lag" = (is.numeric(lag) && lag >=0))
+  length_checks(Y, A, W)
+  n_obs <- length(Y)
+  new_Y <- Y[(1+lag):(n_obs)]
+  new_A <- A[1:(n_obs-lag)]
+  new_W <- data.frame(W[1:(n_obs - lag),])
+  autoregress_df <- auto_lag(Y, autoregress_Y_lags, var_name=var_name)
+  autoregress_df<- autoregress_df[(1+autoregress_Y_lags):n_obs,][-1,]#remove first column which is non-lagged Y
+  nrow_dif <- abs(nrow(autoregress_df) - nrow(new_W))
+  #checking which dataframe is longer and adjusting the length of the other to match'
+  #by removing from from first rows to last
+  #this is done to ensure that the causalNullTest function works
+  #
+  if (nrow(autoregress_df) > nrow(new_W)){
+    autoregress_df <- autoregress_df[(1+nrow_dif):nrow(autoregress_df),]
+  } else if (nrow(autoregress_df) < nrow(new_W)){
+    new_W <- data.frame(new_W[(1+nrow_dif):nrow(new_W),])
+    new_A <- new_A[(1+nrow_dif):length(new_A)]
+    new_Y <- new_Y[(1+nrow_dif):length(new_Y)]
+  }
+  
+  combined_W <- data.frame(new_W, autoregress_df)
+    results <- causalNullTest(Y = new_Y, A=new_A, W=combined_W, 
+                              control=control, p=p)
+  return(results)
+}
+
+causal_null_double_lag_parallel <- function(Y, A, W,  lags, control, p, autoregress_Y_lags, var_name){
   n_cores <- parallel::detectCores()- 1 #saving 1 core for OS 
   print("cores done")
   cl <- makeCluster(n_cores)
-  print(Y)
-  clusterExport(cl, c("Y", "A", "W", "lag_var2", "lags1", "lags2", "control"), envir=environment())
+  clusterExport(cl, c("Y", "A", "W", "lags","control", "p", "var_name", 
+                      "autoregress_Y_lags"), envir=environment())
   print("export done")
+  browser()
   clusterEvalQ(cl, {
     library(tidyverse)
     library(ctsCausal)
     source("functions.R") # Ensure this file is in the working directory
   })
-   results_list <- parSapply(lags2, FUN=function(lag2){
-     
-    res <- causall_null_multi(Y, A, W, lags1, control)
-    names(res) <- paste(lag_var1, "lag", "=", lags1)
-    return(res)},
+  print("starting parsapply")
+  results_list <- parSapply(cl, lags, FUN=function(lag){
+    res <- causal_null_double_lag(Y, A, W, control=control, p=p, lag=lag, 
+                                  autoregress_Y_lags=autoregress_Y_lags, 
+                                  var_name=var_name)
+    return(res)
+    },
     simplify=FALSE)
-   names(results_list) <- paste(lag_var2, "lag", "=", lags2)
-   stopCluster(cl)
+ results_list <- paste("lag", lags)
+  stopCluster(cl)
   return(results_list)
 }
 
+
 #parallel version of the causall_null_multi function
+#testing one lagged variable at a time
 causal_null_parallel <- function(Y, A, W, lags, control = list(cross.fit = FALSE,
                                                              verbose=TRUE, g.n.bins = 2:5), p=2){
   n_cores <- parallel::detectCores()- 1 #saving 1 core for OS 
