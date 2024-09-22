@@ -1,2 +1,3 @@
 # Thesis
-New version
+Master thesis in statistics spring 2024
+
