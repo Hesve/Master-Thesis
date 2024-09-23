@@ -66,7 +66,7 @@ us_diff_np_lc <- np_parallel(formula=us_formula, lag_var1 = "us_interest", lag_v
 swe_combined <- list(swe_lag_1, swe_lag_2, swe_lag_3, swe_lag_4, swe_lag_5, swe_lag_6)
 us_combined <- list(us_lag_1, us_lag_2, us_lag_3, us_lag_4, us_lag_5, us_lag_6)
 
-#for both lists, take the bandiwdhts resulst from each sublist$model$bw
+#for both lists, take the bandwidths resulst from each sublist$model$bw
 swe_bw <- do.call(rbind, lapply(swe_combined, function(x) x$model$bw))
 colnames(swe_bw) <- c("lagged_swe_KPIF)", "swe_unemployment", "swe_interest")
 rownames(swe_bw) <- paste("lag = ", 1:6)
