@@ -9,9 +9,6 @@ library(tidyverse)
 
 FED_data <- read.csv("./data/FEDFUNDS.csv")
 
-#us_inflation <- read_excel("./data/us_inflation.xlsx",
-                          # skip = 10) # skip the first 10 rows as its just information
-
 us_inflation <- read_csv("./data/us_cpi_12_month.csv",skip=0)
 
 us_PCE <- read_csv("./data/us_PCE.csv",skip=c(3))
@@ -77,50 +74,12 @@ data <- tibble(
   swe_interest = as.numeric(gsub(",", ".", riksbanken_data$Medel)),
   us_unemployment = us_unemployment$UNRATE,
   swe_unemployment = swe_unemployment$UnemploymentRate,
-  swe_CPIF = swe_CPIF$CPIF,
+  swe_CPIF = swe_CPIF$KPIF,
   us_PCE = us_PCE$PCE
 )
 
 save(data, file = "./data.RData")
 
 
-#quartlery data
-dates_new <- mutate(data, Date = as.Date(paste0(Date, "-01"))) 
 
-data_quarterly <-  mutate(dates_new, Year = year(Date),
-         Quarter = quarter(Date))
-
-library(lubridate)
-
-# Group by Year and Quarter and calculate the average for each variable
-data_quarterly <-data_quarterly %>%
-  group_by(Year, Quarter) %>%
-  summarise(across(c(swe_CPI, us_CPI, us_interest, swe_interest, us_unemployment, swe_unemployment, swe_CPIF, us_PCE), mean, na.rm = TRUE)) %>%
-  ungroup()
-
-data_quarterly <- tibble(data_quarterly) %>% 
-  dplyr::mutate(across(where(is.numeric), round, 2))
-
-save(data_quarterly, file = "./data_quarterly.RData")
-
-
-
-######
-#old code may be removed later
-##
-
-#us_inflation <- us_inflation %>%  select(-c(14,15)) %>%  pivot_longer( 
-# cols = -Year, 
-#names_to = "Month",  
-#values_to = "InflationRate") %>% 
-#filter(row_number() >= which(Year == 1994 & Month == "Jun"))
-
-#combining the data
-#data <- seq(as.Date("1994-06-01"), length.out = 355, by = "month") %>% 
-#format("%Y-%m") %>% #date variable 
-# tibble(Date = ., swe_CPI = swe_inflation$InflationRate, 
-#  us_CPI = us_inflation$InflationRate, us_interest = FED_data$FEDFUNDS, 
-#  swe_interest = as.numeric(gsub(",", ".", riksbanken_data$Medel)),
-#  us_unemployment= us_unemployment$UNRATE,
-#  "swe_unemployment" = swe_unemployment$UnemploymentRate)
 
